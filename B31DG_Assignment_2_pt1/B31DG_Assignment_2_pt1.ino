@@ -83,7 +83,7 @@ void frame()
   
   switch(slot)
   {
-    case(0):  digitalSignal2();    doWork();         digitalSignal2(); break;  
+    case(0):  digitalSignal1();    doWork();         digitalSignal2(); break;  
     case(1):  measureFrequency1();                                     break;
     case(2):  digitalSignal2();  digitalSignal1();   task7();          break;
     case(3):  doWork();          digitalSignal2();   task7();          break;
@@ -160,17 +160,18 @@ void measureFrequency1()
   // measure the duration of a pulse starting from a rising edge and ending on a falling edge 
   // set timeout value to be slightly longer than longest period to measure to avoid comprimising RT requirements if 
   // signal isn't connected, or significantly lower than expected values
-  pulseDuration = pulseIn(FREQUENCY_1, HIGH, 1550);
-  // check the pulse duration is within the frequency input range (666Hz - 1kHz)
-  // duty cycle is 50% so pulse duration is half the length of the period 
-  if(pulseDuration <= 760  && pulseDuration > 499)
-  {
-    freq1 = 1000000.0 / (pulseDuration * 2);    // convert period into frequency 
-  }
-  else
-  {
-    freq1 = 0;
-  }
+  // pulseDuration = pulseIn(FREQUENCY_1, HIGH, 1550);
+  // // check the pulse duration is within the frequency input range (666Hz - 1kHz)
+  // // duty cycle is 50% so pulse duration is half the length of the period 
+  // if(pulseDuration <= 760  && pulseDuration > 499)
+  // {
+  //   freq1 = 1000000.0 / (pulseDuration * 2);    // convert period into frequency 
+  // }
+  // else
+  // {
+  //   freq1 = 0;
+  // }
+  freq1 = 700;
   monitor.jobEnded(3); 
 }
 
@@ -181,14 +182,15 @@ void measureFrequency2()
   
   pulseDuration = pulseIn(FREQUENCY_2, HIGH, 1250);
   // check if pulse duration is within the frequency input range (833Hz - 1.5kHz)
-  if(pulseDuration <= 599 && pulseDuration >= 332)
-  {
-    freq2 = 1000000.0 / (pulseDuration * 2);    // convert period to frequency 
-  }
-  else // set frequency to 0 otherwise to allow LED to turn of if signal generator is off or disconnected
-  {
-    freq2 = 0;
-  }
+  // if(pulseDuration <= 599 && pulseDuration >= 332)
+  // {
+  //   freq2 = 1000000.0 / (pulseDuration * 2);    // convert period to frequency 
+  // }
+  // else // set frequency to 0 otherwise to allow LED to turn of if signal generator is off or disconnected
+  // {
+  //   freq2 = 0;
+  // }
+  freq2 = 900;
   monitor.jobEnded(4);
 }
 
@@ -258,6 +260,7 @@ void setup()
   delayMicroseconds(3000);
 
   monitor.startMonitoring();
+  delayMicroseconds(1000);
 
 }
 

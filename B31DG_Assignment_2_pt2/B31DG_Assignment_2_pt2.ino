@@ -68,7 +68,7 @@ SemaphoreHandle_t freqSem1;
 SemaphoreHandle_t freqSem2;
 SemaphoreHandle_t btnSem;
 
-// period (ms) for tasks 1 - 5
+// contants for task periods 1-5 (ms)
 const unsigned int task1P = 4;
 const unsigned int task2P = 3;
 const unsigned int task3P = 10;
@@ -78,25 +78,32 @@ const unsigned int task5P = 5;
 void IRAM_ATTR btnInterrupt()
 {
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+  // get millis when button is pressed 
   buttonTime = millis();
+  // check if time between button presses is greater than the debounce time 
   if(buttonTime - lastButtonTime > debounceTime)
   {
+    // give btnSem semaphore to signal task7 to execute code 
     xSemaphoreGiveFromISR(btnSem, &xHigherPriorityTaskWoken);
+    lastButtonTime = buttonTime;
   }
-
+  // if high priority task becomes availble during ISR, signal to scheduler to 
+  // execute higher priority task on exit 
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 // task 1
+// generates digital signal on gpio pins according to specifications 
 void digitalSignal1(void *pvParameters)
 {
   (void) pvParameters;
-  //delayMicroseconds(500);
+  delayMicroseconds(1000);
   TickType_t xlastWakeTime = xTaskGetTickCount();
 
   for(;;)
   {
     monitor.jobStarted(1);
+    
     digitalWrite(SIGNAL_1, HIGH);
     delayMicroseconds(250);
     digitalWrite(SIGNAL_1, LOW);
@@ -111,6 +118,7 @@ void digitalSignal1(void *pvParameters)
   }
 }
 // task 2
+// generates digital signal on gpio pin according to specifications
 void digitalSignal2(void *pvParameters)
 {
   (void) pvParameters;
@@ -119,6 +127,7 @@ void digitalSignal2(void *pvParameters)
   for(;;)
   {
     monitor.jobStarted(2);
+
     digitalWrite(SIGNAL_2, HIGH);
     delayMicroseconds(100);
     digitalWrite(SIGNAL_2, LOW);
@@ -128,23 +137,23 @@ void digitalSignal2(void *pvParameters)
     digitalWrite(SIGNAL_2, LOW);
     
     monitor.jobEnded(2);
-
-    //delayMicroseconds(750);
+    // don't execute task until time since last execution is greater than the task period 
     vTaskDelayUntil(&xlastWakeTime, pdMS_TO_TICKS(task2P));
-
   }
 }
 
 // task 3
+// measures frequency of signal attached to gpio pins
 void measureFrequency1(void *pvParameters)
 {
   (void) pvParameters;
-  //delayMicroseconds(100);
   TickType_t xlastWakeTime = xTaskGetTickCount();
   for(;;)
   {
     monitor.jobStarted(3);
-
+    // get duration of pulse 
+    // set timeout slighly longer than the longest period being measured to prevent long blocking
+    // times 
     pulseDuration = pulseIn(FREQUENCY_1, HIGH, 1550);
 
     xSemaphoreTake(freqSem1, portMAX_DELAY);
@@ -159,12 +168,12 @@ void measureFrequency1(void *pvParameters)
     xSemaphoreGive(freqSem1);
 
     monitor.jobEnded(3); 
-    //vTaskDelay(pdMS_TO_TICKS(task3P));
     vTaskDelayUntil(&xlastWakeTime, pdMS_TO_TICKS(task3P));
   }
 }
 
 // task 4
+// measures frequency of signal attached to gpio pins 
 void measureFrequency2(void *pvParameters)
 {
   (void) pvParameters;
@@ -178,7 +187,7 @@ void measureFrequency2(void *pvParameters)
     pulseDuration = pulseIn(FREQUENCY_2, HIGH, 1250);
     
     xSemaphoreTake(freqSem2, portMAX_DELAY);
-    // only update frequency if it falls within the expected range of frequencies 
+    //only update frequency if it falls within the expected range of frequencies 
     if(pulseDuration <= 599 && pulseDuration >= 332)
     {
       freq2 = 1000000.0 / (pulseDuration * 2);
@@ -214,6 +223,7 @@ void doWork(void *pvParameters)
 }
 
 // task 6
+// checks if sum of frequencies measured in task 3 & 4 is greater than 1500, then lights an LED 
 void compareFreq(void *pvParameters)
 {
   // local variables to store frequencies to avoid semaphores from being held longer than is neccessary
@@ -225,6 +235,7 @@ void compareFreq(void *pvParameters)
     // wait for freq1 semaphore to be released
     if(xSemaphoreTake(freqSem1, portMAX_DELAY)==pdTRUE)
     {
+      // set local variable equal to frequency 2 
       locFreq1 = freq1;
       xSemaphoreGive(freqSem1);
     }
@@ -232,10 +243,12 @@ void compareFreq(void *pvParameters)
     // wait for freq2 semaphore to be released
     if(xSemaphoreTake(freqSem2, portMAX_DELAY)==pdTRUE)
     {
+      // set local variable equal to freqency 2
       locFreq2 = freq2;
       xSemaphoreGive(freqSem2);
     }
 
+    // lights LED if sum of frequencies is greater than or equal to 1500Hz 
     if(locFreq1 + locFreq2 >= 1500)
     {
       digitalWrite(LED1, HIGH);
@@ -247,6 +260,8 @@ void compareFreq(void *pvParameters)
   }
 }
 
+// task 7
+// waits for btn semaphore to become available, then toggles LED state and calls doWork function 
 void task7(void *pvParameters)
 {
   (void) pvParameters;
@@ -263,9 +278,9 @@ void task7(void *pvParameters)
   }
 }
 
-
 void setup() {
   Serial.begin(115200);
+  // set input/output for pins being used 
   pinMode(SIGNAL_1, OUTPUT);
   pinMode(SIGNAL_2, OUTPUT);
   pinMode(FREQUENCY_1, INPUT);
@@ -281,21 +296,19 @@ void setup() {
   freqSem2 = xSemaphoreCreateMutex();
   btnSem = xSemaphoreCreateBinary();
 
+  // attach interrupt to rising edge of button pin
+  attachInterrupt(BUTTON, btnInterrupt, RISING);
+
   // create free rtos tasks on core 0
-  xTaskCreatePinnedToCore(digitalSignal1, "task 1", 2048, NULL, 4, &taskOneHandler, 0);
-  xTaskCreatePinnedToCore(digitalSignal2, "task 2", 2048, NULL, 4, &taskTwoHandler, 0);
+  xTaskCreatePinnedToCore(digitalSignal1, "task 1", 2048, NULL, 3, &taskOneHandler, 0);
+  xTaskCreatePinnedToCore(digitalSignal2, "task 2", 2048, NULL, 3, &taskTwoHandler, 0);
   xTaskCreatePinnedToCore(measureFrequency1, "task 3", 2048, NULL, 1, &taskThreeHandler, 0);
   xTaskCreatePinnedToCore(measureFrequency2, "task 4", 2048, NULL, 1, &taskFourHandler, 0);
-  xTaskCreatePinnedToCore(doWork, "task 5", 1024, NULL, 2, &taskFiveHandler, 0);
+  xTaskCreatePinnedToCore(doWork, "task 5", 2048, NULL, 2, &taskFiveHandler, 0);
   xTaskCreatePinnedToCore(compareFreq, "task 6", 2048, NULL, 0, &taskSixHandler, 0);
-  xTaskCreatePinnedToCore(task7, "task 7", 1024, NULL, 0, &taskSevenHandler, 0);
-
-  delay(60);
+  xTaskCreatePinnedToCore(task7, "task 7", 2048, NULL, 0, &taskSevenHandler, 0);
 
   monitor.startMonitoring();
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
-  Serial.printf("Task 2 stack: %d bytes remaining", uxTaskGetStackHighWaterMark(taskTwoHandler));
-}
+void loop() {}
